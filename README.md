@@ -1,4 +1,6 @@
-# fault-triage-rules
+# tesla-priority-request-queue
+
+Stage 1 of the Morning fault queue. The Python package is `fault_triage_rules`.
 
 Urgency rules for overnight vehicle fault messages, written as Pydantic v2 models. Every later part of the Morning fault queue follows these rules, so a brake warning no longer waits behind a question about wipers.
 

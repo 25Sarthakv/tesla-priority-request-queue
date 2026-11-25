@@ -127,3 +127,9 @@ def test_brakes_feel_normal_sentence_does_not_trigger():
 def test_fire_and_cut_off_rules():
     assert triage(FaultMessage(message_text="I smell smoke from the dash.")).rule_id == "R1_FIRE_OR_POWER_LOSS"
     assert triage(FaultMessage(message_text="Advisor note cut off, it was about the steering")).tag == UrgencyTag.SAFETY_URGENT
+
+
+def test_spongy_pedal_with_no_alert_code_is_safety():
+    r = triage(FaultMessage(vehicle_alert_code="NONE", message_text="No rush. The brake pedal feels spongy when I press it."))
+    assert r.tag == UrgencyTag.SAFETY_URGENT
+    assert r.rule_id == "R2_HIDDEN_BRAKE_STEERING"

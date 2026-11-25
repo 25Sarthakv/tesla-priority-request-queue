@@ -59,7 +59,43 @@ pytest
 ---
 
 ## Key Claude Code prompt
-> **TODO: add the key prompt you gave Claude Code here.**
+
+```text
+Create a new Python repo called fault-triage-rules. Use Pydantic v2 and pytest. Model the urgency rules for overnight vehicle fault messages.
+
+1. Tags. Define an enum UrgencyTag with exactly three members: safety_urgent, soon, routine.
+
+2. Fix paths. Define an enum FixPath with exactly four members:
+   - stop_and_tow: call the owner within 30 minutes, tell them not to drive, tow or send a mobile tech, same-day brake and steering bay.
+   - priority_booking: book within 3 working days; the owner may keep driving.
+   - scheduled_repair: workshop repair at the next scheduled visit.
+   - self_serve_reply: reply with steps to try first, no booking.
+   Map tags to paths in one place: safety_urgent -> stop_and_tow only; soon -> priority_booking only; routine -> scheduled_repair or self_serve_reply. Reject any other pairing in a validator.
+
+3. Safety alert list. A frozen set of codes taken from the vehicle_alert_code column of the CSV: BRK_a001, BRK_w003, ABS_w002, ESP_w003, EPAS_w202, EPAS_a191. Add a validator that every code on the list exists in the CSV. NONE is the absence of an alert and must never be on the list. UI_a004, CP_a004, WIP_w001 and HVAC_w003 are not safety codes.
+
+4. Rules. A Pydantic model TriageResult(tag, fix_path, rule_id, reason) and a function triage(message) -> TriageResult. The first match wins, in this order:
+   - smoke, fire, sparks, burning smell, or loss of power while driving -> safety_urgent
+   - the hidden safety rule: brake or steering symptom wording -> safety_urgent. This covers soft, sinking, spongy or long pedal; pulling or tugging when braking or stopping; grinding at stops; heavy, loose, wobbling or shimmying steering. It applies when the code is NONE, when the code is not on the safety list, and when the tone is calm or polite. Tone must never lower the tag. Check one sentence at a time and skip any sentence saying the brakes or steering feel normal.
+   - loss of braking, such as "pedal went to the floor" -> safety_urgent
+   - code on the safety list -> safety_urgent, even without symptom wording
+   - cut-off note that mentions brakes, pedal, steering or pulling -> safety_urgent
+   - soon: cannot charge or cable locked in; wipers stuck or stopping, or defrost failing; screen rebooting while driving; tyre pressure, bouncy ride, wheel hum, smell from vents; other cut-off notes
+   - everything else -> routine. Use self_serve_reply for app, key, range and delivery questions, and scheduled_repair for noises and physical repairs.
+
+5. Tests. Load the CSV from data/. Assert that all 60 rows with hand_checked_safety_fault=TRUE come out safety_urgent. Assert that the hidden rule fires on NONE rows (expect 41). Add unit tests for: a calm "no rush" soft-pedal message, a NONE code, a code not on the list, and a "brakes feel normal" sentence that must not trigger.
+
+6. Docs. A README that explains the tags, paths, safety list and hidden rule, and contains two sections for me to fill in: the key prompt you were given, and one change made to your output with the reason. Leave both sections as clearly marked placeholders; do not invent them.
+
+Commit with clear messages, create the GitHub repo, and push. Give me the link.
+```
 
 ## One change I made to Claude Code's output, and why
-> **TODO: describe one real change you made to the generated code, and the reason.**
+
+**The "spongy" word was missed by the pedal-feel check.**
+
+The first version of the hidden brake and steering rule matched pedal words with a word boundary on both sides, and it listed the stem `spong` instead of the whole word. So "the pedal feels spongy" did not match, because "spong" is followed by "y", not a word boundary. I noticed it when a message with a brake alert code and the text "pedal feels spongy" passed only because of its alert code. The same wording with no alert code would have been tagged routine.
+
+I changed the pattern to `spong\w*`, so "spongy" and "sponginess" both match, and added a regression test (`test_spongy_pedal_with_no_alert_code_is_safety`) for a `NONE`-code message.
+
+**Why:** this rule exists to catch calm messages that hide a brake symptom. A missed word means a safety message waits as routine, which is the exact failure the rule is there to prevent. Without the test, the bug could return unnoticed.
